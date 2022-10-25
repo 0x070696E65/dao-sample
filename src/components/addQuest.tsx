@@ -27,7 +27,7 @@ export const AddQuest = () => {
       workerPubKey: '',
       title: questData.title,
       details: questData.details,
-      reward: questData.reward,
+      reward: Number(questData.reward),
       status: 0,
     };
     apiClient.post('/api/createQuest', quest);

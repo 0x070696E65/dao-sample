@@ -8,8 +8,7 @@ import {
 } from '@nestjs/common';
 import { AppService } from './app.service';
 import { ParamsInterceptor } from './params.interceptor';
-import type { SignedAndCosig, AggregateBonded } from '../shared/types';
-import { QuestData } from '../shared/types';
+import type { AggregateBonded, QuestData } from '../shared/types';
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
