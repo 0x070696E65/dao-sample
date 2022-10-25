@@ -1,82 +1,83 @@
 import { Injectable } from '@nestjs/common';
+import { AggregateBonded } from '../shared/types/';
 import {
-  AggregateTransactionCosignature,
-  SignedTransaction,
-  CosignatureTransaction,
   Account,
-  NetworkType,
-  AggregateTransaction,
   RepositoryFactoryHttp,
-  Transaction,
   PublicAccount,
   EncryptedMessage,
 } from 'symbol-sdk';
+import { node, networkType } from '../shared/lib/config';
+import * as fs from 'fs';
+const repositoryFactory = new RepositoryFactoryHttp(node);
+const listener = repositoryFactory.createListener();
+const transactionHttp = repositoryFactory.createTransactionRepository();
+
+import { filter, delay, mergeMap } from 'rxjs';
+import { QuestData } from '../shared/types';
+import datas from 'public/tempData/data.json';
+
 @Injectable()
 export class AppService {
-  async cosignWithAdmin(
-    signedTransaction: SignedTransaction,
-    aggregateTransactionCosignature: AggregateTransactionCosignature[],
-  ): Promise<string | undefined> {
-    const networkType =
-      Number(process.env.NETWORK_TYPE) == 152
-        ? NetworkType.TEST_NET
-        : NetworkType.MAIN_NET;
-    const admin = Account.createFromPrivateKey(
-      process.env.ADMIN_PRIVATE_KEY!,
+  async signUp(aggregateBonded: AggregateBonded) {
+    const signer = PublicAccount.createFromPublicKey(
+      aggregateBonded.signedHashLockTransaction.signerPublicKey,
       networkType,
     );
-    const cosignedTransaction = CosignatureTransaction.signTransactionPayload(
-      admin,
-      signedTransaction.payload,
-      process.env.GENERATION_HASH!,
-    );
-    const cosignature = new AggregateTransactionCosignature(
-      cosignedTransaction.signature,
-      admin.publicAccount,
-    );
-    const agg = AggregateTransaction.createFromPayload(
-      signedTransaction.payload,
-    );
-    agg.cosignatures.push(cosignature);
-    if (aggregateTransactionCosignature.length != 0) {
-      for (let i = 0; i < aggregateTransactionCosignature.length; i++) {
-        const cosignature = new AggregateTransactionCosignature(
-          aggregateTransactionCosignature[i].signature,
-          PublicAccount.createFromPublicKey(
-            aggregateTransactionCosignature[i].signer.publicKey,
-            networkType,
-          ),
+    transactionHttp
+      .announce(aggregateBonded.signedHashLockTransaction)
+      .subscribe(
+        (x) => {
+          console.log(x);
+        },
+        (err) => console.error(err),
+      );
+
+    listener.open().then(() => {
+      console.log('listener open');
+      listener.newBlock();
+      listener
+        .confirmed(signer.address)
+        .pipe(
+          filter((tx) => {
+            console.log(tx);
+            return (
+              tx.transactionInfo !== undefined &&
+              tx.transactionInfo.hash ===
+                aggregateBonded.signedHashLockTransaction.hash
+            );
+          }),
+          delay(5000),
+          mergeMap((_) => {
+            return transactionHttp.announceAggregateBonded(
+              aggregateBonded.signedAggTransaction,
+            );
+          }),
+        )
+        .subscribe(
+          (x) => {
+            console.log('tx Ok!!!', x);
+            listener.close();
+          },
+          (err) => {
+            console.error(err);
+            listener.close();
+          },
         );
-        console.log(cosignature);
-        agg.cosignatures.push(cosignature);
-      }
-    }
-    const signedHash = Transaction.createTransactionHash(
-      signedTransaction.payload,
-      [...Buffer.from(process.env.GENERATION_HASH!, 'hex')],
-    );
-    const repositoryFactoryHttp = new RepositoryFactoryHttp(
-      process.env.NODE_URL!,
-    );
-    if (agg.signer?.publicKey == undefined)
-      throw new Error('no signer public key');
-    console.log(agg);
-    const signed = new SignedTransaction(
-      agg.serialize(),
-      signedHash,
-      agg.signer?.publicKey,
-      agg.type,
-      networkType,
-    );
-    const txRepo = repositoryFactoryHttp.createTransactionRepository();
-    const result = await txRepo.announce(signed).toPromise();
-    return result?.message;
+    });
   }
+
+  createQuest(questData: QuestData) {
+    datas.datas.push(questData);
+    console.log(datas);
+    fs.writeFileSync('public/tempData/data.json', JSON.stringify(datas));
+  }
+
+  overrideQuest(questDatas: any) {
+    console.log(questDatas);
+    fs.writeFileSync('public/tempData/data.json', JSON.stringify(questDatas));
+  }
+
   verifyToken(arr: string[]): string {
-    const networkType =
-      Number(process.env.NETWORK_TYPE) == 152
-        ? NetworkType.TEST_NET
-        : NetworkType.MAIN_NET;
     const userPublicKey = PublicAccount.createFromPublicKey(
       arr[0],
       networkType,
@@ -88,8 +89,5 @@ export class AppService {
     );
     const token = admin.decryptMessage(msg, userPublicKey).payload;
     return token;
-  }
-  getHello(): string {
-    return 'Hello World!';
   }
 }

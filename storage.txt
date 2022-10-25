@@ -1,0 +1,87 @@
+const filterUserWorks = async function (
+  quests: QuestData[],
+  publicKey: string,
+) {
+  const userAddress = Address.createFromPublicKey(publicKey, networkType);
+
+  const result: QuestData[] = [];
+  for (let i = 0; i < quests.length; i++) {
+    const multisigDatas = await multisigRepo
+      .getMultisigAccountInfo(
+        PublicAccount.createFromPublicKey(quests[i].publicKey, networkType)
+          .address,
+      )
+      .toPromise();
+    const b = multisigDatas?.cosignatoryAddresses.some((a) => {
+      return a.plain() == userAddress.plain();
+    });
+    if (b) {
+      result.push(quests[i]);
+    }
+  }
+  return result.filter((val) => {
+    return val.ownerPubKey != publicKey;
+  });
+};
+const filterUserRequests = async function (
+  quests: QuestData[],
+  publicKey: string,
+) {
+  const userAddress = Address.createFromPublicKey(publicKey, networkType);
+  const result: QuestData[] = [];
+  for (let i = 0; i < quests.length; i++) {
+    const multisigDatas = await multisigRepo
+      .getMultisigAccountInfo(
+        PublicAccount.createFromPublicKey(quests[i].publicKey, networkType)
+          .address,
+      )
+      .toPromise();
+    const b = multisigDatas?.cosignatoryAddresses.some((a) => {
+      return a.plain() == userAddress.plain();
+    });
+    if (b) {
+      result.push(quests[i]);
+    }
+  }
+  return result.filter((val) => {
+    return val.ownerPubKey == publicKey;
+  });
+};
+const getQuests = async function () {
+  try {
+    const multisigDatas = await multisigRepo
+      .getMultisigAccountInfo(adminPublic.address)
+      .toPromise();
+    if (multisigDatas == undefined) return;
+    const quests: QuestData[] = [];
+    for (let i = 0; i < multisigDatas.multisigAddresses.length; i++) {
+      const add = Address.createFromRawAddress(
+        multisigDatas?.multisigAddresses[i].plain(),
+      );
+      const meta = await metaRepo
+        .search({
+          sourceAddress: adminPublic.address,
+          targetAddress: add,
+          //scopedMetadataKey: process.env.NEXT_PUBLIC_QUEST_METADATA_KEY,
+        })
+        .toPromise();
+      const value = meta?.data[0].metadataEntry.value;
+      if (value == undefined) continue;
+      const questData: QuestData = JSON.parse(value);
+      const multisigQuest = await multisigRepo
+        .getMultisigAccountInfo(add)
+        .toPromise();
+      if (multisigQuest == undefined) continue;
+      if (multisigQuest?.cosignatoryAddresses.length > 2) {
+        questData.status = 1;
+      }
+      quests.push(questData);
+    }
+    return quests;
+  } catch {
+    //
+  }
+};
+
+
+*/
